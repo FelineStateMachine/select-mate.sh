@@ -4,13 +4,58 @@ set -euo pipefail
 
 APP_NAME="select-mate"
 APP_TITLE="select-mate.sh"
-STATE_ROOT="${XDG_STATE_HOME:-$HOME/.local/state}"
-APP_STATE_DIR="$STATE_ROOT/$APP_NAME"
-DEFAULT_DB_PATH="$APP_STATE_DIR/game.db"
-DB_PATH="$DEFAULT_DB_PATH"
 CONFIG_PATH="${XDG_CONFIG_HOME:-$HOME/.config}/select-mate.conf"
+DEFAULT_DB_PATH="$(dirname "$CONFIG_PATH")/game.db"
+DB_PATH="$DEFAULT_DB_PATH"
 SESSION_IDENTITY_ID=""
 SESSION_IDENTITY_NAME=""
+
+has_gum() {
+  command -v gum >/dev/null 2>&1
+}
+
+prepare_interactive_stdin() {
+  if [[ -t 0 || -r /dev/tty ]]; then
+    return 0
+  fi
+  printf 'An interactive terminal is required for prompts.\n' >&2
+  return 1
+}
+
+read_user_line() {
+  local __reply_var=$1
+
+  if [[ -t 0 ]]; then
+    IFS= read -r "$__reply_var" || return 1
+    return 0
+  fi
+
+  IFS= read -r "$__reply_var" </dev/tty || return 1
+}
+
+gum_confirm_interactive() {
+  if [[ -t 0 ]]; then
+    gum confirm "$@"
+    return $?
+  fi
+  gum confirm "$@" </dev/tty
+}
+
+gum_input_interactive() {
+  if [[ -t 0 ]]; then
+    gum input "$@"
+    return $?
+  fi
+  gum input "$@" </dev/tty
+}
+
+gum_choose_interactive() {
+  if [[ -t 0 ]]; then
+    gum choose "$@"
+    return $?
+  fi
+  gum choose "$@" </dev/tty
+}
 
 usage() {
   cat <<'EOF'
@@ -27,6 +72,7 @@ Commands:
 Startup defaults:
   - Identity config: ${XDG_CONFIG_HOME:-$HOME/.config}/select-mate.conf
     Example: identity=alice
+  - Board path when stdin does not provide a URI: ${XDG_CONFIG_HOME:-$HOME/.config}/game.db
   - Board URI from stdin when stdin is not a TTY
     Example: printf 'file:/tmp/select-mate.db?mode=rwc\n' | ./select-mate.sh --whoami
 EOF
@@ -51,13 +97,6 @@ dbqt() {
 require_sqlite() {
   if ! command -v sqlite3 >/dev/null 2>&1; then
     printf 'sqlite3 is required.\n' >&2
-    exit 1
-  fi
-}
-
-require_gum() {
-  if ! command -v gum >/dev/null 2>&1; then
-    printf 'gum is required to play interactively. Install it from https://github.com/charmbracelet/gum.\n' >&2
     exit 1
   fi
 }
@@ -383,12 +422,14 @@ count_lines() {
 
 confirm_action() {
   local prompt=$1
-  if command -v gum >/dev/null 2>&1; then
-    gum confirm "$prompt"
+  local reply
+
+  if has_gum; then
+    gum_confirm_interactive "$prompt"
     return $?
   fi
-  printf '%s [y/N] ' "$prompt"
-  read -r reply
+  printf '%s [y/N] ' "$prompt" >&2
+  read_user_line reply || return 1
   [[ "$reply" == "y" || "$reply" == "Y" ]]
 }
 
@@ -572,18 +613,18 @@ prompt_text_input() {
   local default_value=${2:-}
   local reply
 
-  if command -v gum >/dev/null 2>&1; then
+  if has_gum; then
     if [[ -n "$default_value" ]]; then
-      reply=$(gum input --prompt "$prompt: " --value "$default_value") || return 1
+      reply=$(gum_input_interactive --prompt "$prompt: " --value "$default_value") || return 1
     else
-      reply=$(gum input --prompt "$prompt: ") || return 1
+      reply=$(gum_input_interactive --prompt "$prompt: ") || return 1
     fi
     printf '%s' "$reply"
     return 0
   fi
 
-  printf '%s: ' "$prompt"
-  read -r reply || return 1
+  printf '%s: ' "$prompt" >&2
+  read_user_line reply || return 1
   if [[ -z "$reply" && -n "$default_value" ]]; then
     reply=$default_value
   fi
@@ -592,11 +633,41 @@ prompt_text_input() {
 
 pick_option() {
   local header=$1
+  local options=()
+  local option_count reply i option
   shift
-  if [[ "$#" -eq 0 ]]; then
+  options=("$@")
+  option_count=${#options[@]}
+
+  if [[ "$option_count" -eq 0 ]]; then
     return 1
   fi
-  printf '%s\n' "$@" | gum choose --header "$header"
+
+  if has_gum; then
+    printf '%s\n' "${options[@]}" | gum_choose_interactive --header "$header"
+    return 0
+  fi
+
+  printf '%s\n' "$header" >&2
+  for ((i = 0; i < option_count; i += 1)); do
+    printf '  %d) %s\n' "$((i + 1))" "${options[$i]}" >&2
+  done
+
+  while :; do
+    reply=$(prompt_text_input "Choose 1-$option_count") || return 1
+    reply=$(trim_string "$reply")
+    if [[ "$reply" =~ ^[0-9]+$ ]] && ((reply >= 1 && reply <= option_count)); then
+      printf '%s' "${options[$((reply - 1))]}"
+      return 0
+    fi
+    for option in "${options[@]}"; do
+      if [[ "$reply" == "$option" ]]; then
+        printf '%s' "$option"
+        return 0
+      fi
+    done
+    printf 'Choose one of the listed options.\n' >&2
+  done
 }
 
 prompt_for_identity_name() {
@@ -605,7 +676,7 @@ prompt_for_identity_name() {
   local choice name
   local options=()
 
-  if command -v gum >/dev/null 2>&1; then
+  if has_gum; then
     while IFS= read -r line; do
       [[ -n "$line" ]] || continue
       options[${#options[@]}]=$line
@@ -1573,7 +1644,7 @@ interactive_game() {
   local destination_options destination_choice target_square action status
   local piece_file piece_rank allow_switch_identity
 
-  require_gum
+  prepare_interactive_stdin || return 1
   ensure_selected_identity_for_interactive || return 0
 
   while :; do
@@ -1593,8 +1664,12 @@ interactive_game() {
     fi
 
     clear_screen
-    gum style --border rounded --padding "1 2" --margin "1 0" --border-foreground 212 "$(printf '%s\n' "$APP_TITLE")"
-    gum style --border normal --padding "1 2" "$screen"
+    if has_gum; then
+      gum style --border rounded --padding "1 2" --margin "1 0" --border-foreground 212 "$(printf '%s\n' "$APP_TITLE")"
+      gum style --border normal --padding "1 2" "$screen"
+    else
+      printf '%s\n\n%s\n' "$APP_TITLE" "$screen"
+    fi
 
     if [[ -z "$game_id" ]]; then
       action=$(pick_option "No active game." "new game" "new local game" "switch identity" "quit") || return 0
@@ -1826,7 +1901,7 @@ main() {
       fi
       ;;
     --new)
-      require_gum
+      prepare_interactive_stdin || exit 1
       ensure_selected_identity_for_interactive || exit 0
       if confirm_action "Start a new game?"; then
         start_new_game_flow "multiplayer"
@@ -1834,7 +1909,7 @@ main() {
       interactive_game
       ;;
     --local)
-      require_gum
+      prepare_interactive_stdin || exit 1
       ensure_selected_identity_for_interactive || exit 0
       if confirm_action "Start a new local game?"; then
         start_new_game_flow "local"
@@ -1852,6 +1927,6 @@ main() {
   esac
 }
 
-if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+if [[ "${BASH_SOURCE[0]-$0}" == "$0" ]]; then
   main "$@"
 fi

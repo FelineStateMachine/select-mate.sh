@@ -6,7 +6,8 @@
 
 - `bash`
 - `sqlite3`
-- `gum`
+- `curl` if you want to run it directly from `https://select-mate.sh`
+- `gum` for the richer picker UI, optional
 
 On macOS with Homebrew:
 
@@ -14,7 +15,17 @@ On macOS with Homebrew:
 brew install sqlite gum
 ```
 
+If you skip `gum`, the game falls back to plain terminal prompts and numbered menus.
+
 ## Quick Start
+
+Run the hosted script in one shot:
+
+```bash
+curl -fsSL https://select-mate.sh | bash
+```
+
+The URL should serve the actual released `select-mate.sh` script. When launched this way, the script reattaches to your terminal for prompts, asks for your identity, and then lets you choose between a multiplayer game and a local-only game.
 
 Make sure the script is executable:
 
@@ -71,6 +82,8 @@ Show CLI help:
 ./select-mate.sh --help
 ```
 
+If you are hosting the curl entrypoint yourself, serve the exact released `select-mate.sh` script at `https://select-mate.sh`.
+
 For a shared live-test setup with two terminals:
 
 ```bash
@@ -94,16 +107,16 @@ Config format is a single key/value entry:
 identity=alice
 ```
 
-Game state is stored here by default:
+If you do not pipe a board URI on stdin, game state is stored next to the config file by default:
 
 ```bash
-${XDG_STATE_HOME:-$HOME/.local/state}/select-mate/game.db
+${XDG_CONFIG_HOME:-$HOME/.config}/game.db
 ```
 
-If you want an isolated game state for testing, point `XDG_STATE_HOME` somewhere else:
+If you want an isolated game state for testing, point `XDG_CONFIG_HOME` somewhere else:
 
 ```bash
-XDG_STATE_HOME="$(mktemp -d)" ./select-mate.sh
+XDG_CONFIG_HOME="$(mktemp -d)" ./select-mate.sh
 ```
 
 ## Multiplayer
@@ -163,19 +176,11 @@ Helper targets:
 - `make test-board-uri` prints the shared board URI.
 - `make test-reset` removes the shared `/tmp/select-mate-live` test area.
 
-Example using a shared local folder:
+For multiplayer with separate config homes or identities, pipe the shared board URI on stdin:
 
 ```bash
-mkdir -p /tmp/select-mate-shared
-export XDG_STATE_HOME=/tmp/select-mate-shared
-./select-mate.sh
-```
-
-On a second terminal or second machine with access to the same shared directory, choose another identity:
-
-```bash
-export XDG_STATE_HOME=/tmp/select-mate-shared
-./select-mate.sh --identity bob
+printf 'file:/tmp/select-mate-shared/game.db?mode=rwc\n' | ./select-mate.sh --identity alice
+printf 'file:/tmp/select-mate-shared/game.db?mode=rwc\n' | ./select-mate.sh --identity bob
 ```
 
 Recommended flow:
@@ -185,13 +190,6 @@ Recommended flow:
 - Only the identity assigned to the side to move gets write actions.
 - The other identity sees a read-only waiting view and can still refresh and inspect moves.
 - Choose the player identity up front with `--identity NAME` before joining a multiplayer board.
-
-If you prefer a URI-based board target instead of `XDG_STATE_HOME`, pipe the board URI on stdin:
-
-```bash
-printf 'file:/tmp/select-mate-shared/game.db?mode=rwc\n' | ./select-mate.sh --identity alice
-printf 'file:/tmp/select-mate-shared/game.db?mode=rwc\n' | ./select-mate.sh --identity bob
-```
 
 Current limitations:
 
