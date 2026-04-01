@@ -19,6 +19,12 @@ set -euo pipefail
 
 APP_NAME="select-mate"
 APP_TITLE="select-mate.sh"
+GUM_THEME_ACCENT="#cc8844"
+GUM_THEME_ACCENT_TEXT="#e4e4e4"
+GUM_THEME_TEXT_FG="#d0d0d0"
+GUM_THEME_TEXT_DIM="#949494"
+GUM_THEME_SURFACE_BG="#3a3a3a"
+GUM_THEME_BORDER="#585858"
 CONFIG_PATH="${XDG_CONFIG_HOME:-$HOME/.config}/select-mate.conf"
 DEFAULT_DB_PATH="$(dirname "$CONFIG_PATH")/game.db"
 DB_PATH="$DEFAULT_DB_PATH"
@@ -49,27 +55,49 @@ read_user_line() {
 }
 
 gum_confirm_interactive() {
+  local style_args=(
+    --prompt.foreground "$GUM_THEME_ACCENT"
+    --selected.foreground "$GUM_THEME_ACCENT_TEXT"
+    --selected.background "$GUM_THEME_ACCENT"
+    --unselected.foreground "$GUM_THEME_TEXT_FG"
+    --unselected.background "$GUM_THEME_SURFACE_BG"
+    --padding "0 1"
+  )
   if [[ -t 0 ]]; then
-    gum confirm "$@"
+    gum confirm "${style_args[@]}" "$@"
     return $?
   fi
-  gum confirm "$@" </dev/tty
+  gum confirm "${style_args[@]}" "$@" </dev/tty
 }
 
 gum_input_interactive() {
+  local style_args=(
+    --prompt.foreground "$GUM_THEME_ACCENT"
+    --placeholder.foreground "$GUM_THEME_TEXT_DIM"
+    --cursor.foreground "$GUM_THEME_ACCENT"
+    --header.foreground "$GUM_THEME_ACCENT"
+    --padding "0 1"
+  )
   if [[ -t 0 ]]; then
-    gum input "$@"
+    gum input "${style_args[@]}" "$@"
     return $?
   fi
-  gum input "$@" </dev/tty
+  gum input "${style_args[@]}" "$@" </dev/tty
 }
 
 gum_choose_interactive() {
+  local style_args=(
+    --cursor.foreground "$GUM_THEME_ACCENT"
+    --header.foreground "$GUM_THEME_ACCENT"
+    --item.foreground "$GUM_THEME_TEXT_FG"
+    --selected.foreground "$GUM_THEME_ACCENT"
+    --padding "0 1"
+  )
   if [[ -t 0 ]]; then
-    gum choose "$@"
+    gum choose "${style_args[@]}" "$@"
     return $?
   fi
-  gum choose "$@" </dev/tty
+  gum choose "${style_args[@]}" "$@" </dev/tty
 }
 
 usage() {
@@ -1680,8 +1708,8 @@ interactive_game() {
 
     clear_screen
     if has_gum; then
-      gum style --border rounded --padding "1 2" --margin "1 0" --border-foreground 212 "$(printf '%s\n' "$APP_TITLE")"
-      gum style --border normal --padding "1 2" "$screen"
+      gum style --bold --foreground "$GUM_THEME_ACCENT_TEXT" --background "$GUM_THEME_ACCENT" --padding "0 1" --margin "1 0" "$(printf '%s\n' "$APP_TITLE")"
+      gum style --foreground "$GUM_THEME_TEXT_FG" --border normal --border-foreground "$GUM_THEME_BORDER" --padding "1 2" "$screen"
     else
       printf '%s\n\n%s\n' "$APP_TITLE" "$screen"
     fi
