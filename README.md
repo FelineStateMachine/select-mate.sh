@@ -22,10 +22,10 @@ If you skip `gum`, the game falls back to plain terminal prompts and numbered me
 Run the hosted script in one shot:
 
 ```bash
-curl -fsSL https://select-mate.sh | bash
+curl -fsSL https://select-mate.sh | sh
 ```
 
-The URL should serve the actual released `select-mate.sh` script. When launched this way, the script reattaches to your terminal for prompts, asks for your identity, and then lets you choose between a multiplayer game and a local-only game.
+The URL should serve the actual released `select-mate.sh` script. When launched this way, the script hops into `bash`, reattaches to your terminal for prompts, asks for your identity, and then lets you choose between a multiplayer game and a local-only game.
 
 Make sure the script is executable:
 

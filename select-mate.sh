@@ -1,5 +1,20 @@
 #!/usr/bin/env bash
 
+if [ -z "${BASH_VERSION:-}" ]; then
+  if command -v bash >/dev/null 2>&1; then
+    case "${0##*/}" in
+      sh|dash|ash)
+        exec bash /dev/fd/0 "$@"
+        ;;
+      *)
+        exec bash "$0" "$@"
+        ;;
+    esac
+  fi
+  printf 'bash is required.\n' >&2
+  exit 1
+fi
+
 set -euo pipefail
 
 APP_NAME="select-mate"
@@ -644,7 +659,7 @@ pick_option() {
   fi
 
   if has_gum; then
-    printf '%s\n' "${options[@]}" | gum_choose_interactive --header "$header"
+    gum_choose_interactive --header "$header" "${options[@]}"
     return 0
   fi
 
